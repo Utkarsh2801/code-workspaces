@@ -50,7 +50,21 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:Pattern=`^[0-9]+([EPTGMK]i?|[eE][0-9]+)?$`
 	// +optional
 	StorageSize string `json:"storageSize,omitempty"`
+
+	// StoragePolicy determines whether the workspace PVC is deleted or retained.
+	// +kubebuilder:validation:Enum=Delete;Retain
+	// +kubebuilder:default=Delete
+	// +optional
+	StoragePolicy WorkspaceStoragePolicy `json:"storagePolicy,omitempty"`
 }
+
+// WorkspaceStoragePolicy controls persistent workspace storage lifecycle.
+type WorkspaceStoragePolicy string
+
+const (
+	StoragePolicyDelete WorkspaceStoragePolicy = "Delete"
+	StoragePolicyRetain WorkspaceStoragePolicy = "Retain"
+)
 
 // WorkspaceStatus defines the observed state of Workspace.
 type WorkspaceStatus struct {
@@ -64,6 +78,11 @@ type WorkspaceStatus struct {
 	URL string `json:"url,omitempty"`
 	// +optional
 	Message string `json:"message,omitempty"`
+	// Conditions represent the latest observed state of the Workspace.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -87,6 +106,7 @@ const (
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="IP",type=string,JSONPath=`.status.ip`
 // +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.status.url`
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=='Ready')].status`
 // +kubebuilder:validation:XValidation:rule="self.metadata.name.matches('^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$')",message="name must be 1 to 63 characters, start with a lowercase letter, and contain only lowercase letters, digits, or hyphens; it must end with a lowercase letter or digit"
 type Workspace struct {
 	metav1.TypeMeta `json:",inline"`

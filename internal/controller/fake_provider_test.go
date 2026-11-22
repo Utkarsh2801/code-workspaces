@@ -13,7 +13,7 @@ type FakeProvider struct {
 	GetErr     error
 	ListErr    error
 	Created    []compute.CreateRequest
-	Deleted    []string
+	Deleted    []compute.DeleteRequest
 	ListResult []*compute.Instance
 }
 
@@ -41,12 +41,12 @@ func (p *FakeProvider) Create(_ context.Context, req compute.CreateRequest) (*co
 	return instance, nil
 }
 
-func (p *FakeProvider) Delete(_ context.Context, uid string) error {
-	p.Deleted = append(p.Deleted, uid)
+func (p *FakeProvider) Delete(_ context.Context, req compute.DeleteRequest) error {
+	p.Deleted = append(p.Deleted, req)
 	if p.DeleteErr != nil {
 		return p.DeleteErr
 	}
-	delete(p.Instances, uid)
+	delete(p.Instances, req.UID)
 	return nil
 }
 

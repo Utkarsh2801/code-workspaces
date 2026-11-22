@@ -85,7 +85,7 @@ func TestKubernetesProviderCreateGetAndDelete(t *testing.T) {
 		t.Errorf("Get() = %+v, want running Pod with IP 10.0.0.4", instance)
 	}
 
-	if err := provider.Delete(ctx, "workspace-uid"); err != nil {
+	if err := provider.Delete(ctx, DeleteRequest{UID: "workspace-uid"}); err != nil {
 		t.Fatalf("Delete() error: %v", err)
 	}
 	_, err = provider.Get(ctx, "workspace-uid")
@@ -95,6 +95,32 @@ func TestKubernetesProviderCreateGetAndDelete(t *testing.T) {
 	var deletedPVC corev1.PersistentVolumeClaim
 	if err := provider.client.Get(ctx, types.NamespacedName{Name: "test-workspace", Namespace: "default"}, &deletedPVC); err == nil {
 		t.Fatal("PVC remains after Delete(), want deleted PVC")
+	}
+}
+
+func TestKubernetesProviderRetainsPVC(t *testing.T) {
+	provider := newTestKubernetesProvider(t)
+	ctx := context.Background()
+
+	_, err := provider.Create(ctx, CreateRequest{
+		UID: "workspace-uid", Name: "test-workspace", Namespace: "default",
+		Owner: "owner@example.com", Image: "codercom/code-server", Port: 8080,
+		RetainStorage: true,
+	})
+	if err != nil {
+		t.Fatalf("Create() error: %v", err)
+	}
+
+	if err := provider.Delete(ctx, DeleteRequest{UID: "workspace-uid", RetainStorage: true}); err != nil {
+		t.Fatalf("Delete() error: %v", err)
+	}
+
+	var pvc corev1.PersistentVolumeClaim
+	if err := provider.client.Get(ctx, types.NamespacedName{Name: "test-workspace", Namespace: "default"}, &pvc); err != nil {
+		t.Fatalf("retained PVC should exist: %v", err)
+	}
+	if len(pvc.OwnerReferences) != 0 {
+		t.Errorf("retained PVC owner references = %+v, want none", pvc.OwnerReferences)
 	}
 }
 

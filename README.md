@@ -62,11 +62,10 @@ that isolated cluster can safely be created on your machine.
 
 ## Security and production considerations
 
-This project is intended for local development and learning. The current
-controller uses the Docker socket, which grants broad control over its Docker
-host, and workspace editor containers rely on the authenticated proxy for
-access control. It does not yet provide hardened workload isolation or
-persistent workspace storage.
+This project is intended for local development and learning. Workspace
+containers run as Kubernetes Pods with PVC-backed storage. The editor routes
+also rely on Pomerium for access control. It does not yet provide production-grade
+workload isolation, backup, or storage recovery.
 
 Before deploying for multiple users, review the [security and production
 considerations](docs/security-and-production.md) and design suitable

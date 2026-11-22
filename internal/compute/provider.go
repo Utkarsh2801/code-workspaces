@@ -10,7 +10,13 @@ import (
 
 var ErrNotFound = errors.New("instance not found")
 
-const StateRunning = "running"
+const (
+	StateRunning   = "running"
+	LabelManagedBy = "managed-by"
+	LabeUID        = "workspace-uid"
+	LabeOwner      = "workspace-owner"
+	managedValue   = "docker-workspaces"
+)
 
 // contains information about a machine instance.
 type Instance struct {
@@ -33,13 +39,19 @@ type CreateRequest struct {
 	Port           int
 	Args           []string
 	StorageSize    string
+	RetainStorage  bool
 	OwnerReference metav1.OwnerReference
+}
+
+type DeleteRequest struct {
+	UID           string
+	RetainStorage bool
 }
 
 type Provider interface {
 	Create(ctx context.Context, req CreateRequest) (*Instance, error)
 
-	Delete(ctx context.Context, id string) error
+	Delete(ctx context.Context, req DeleteRequest) error
 
 	Get(ctx context.Context, id string) (*Instance, error)
 

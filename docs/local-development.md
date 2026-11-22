@@ -136,16 +136,16 @@ make install
 
 ### A Workspace stays Pending or Creating
 
-Check its status, the manager logs, and the Docker socket mount:
+Check its status and the manager logs:
 
 ```sh
 kubectl get ws <name> -o yaml
 kubectl logs -n docker-workspace-system deployment/docker-workspace-controller-manager
-docker exec docker-workspaces-control-plane sh -c 'test -S /var/run/docker.sock'
+kubectl get pod,pvc,service,ingress -n default
 ```
 
-Also verify that the manager can reach Docker and that the requested image can
-be pulled. A deleting Workspace remains until the controller can remove its
+Verify that the requested image can be pulled and that the Workspace Pod and
+PVC are created. A deleting Workspace remains until the controller removes its
 container.
 
 ### A workspace URL does not resolve or reach the container

@@ -19,10 +19,13 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -76,7 +79,10 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return ctrl.Result{}, nil
 		}
 		logf.Log.Info("Deleting workspace", "uid", uid)
-		if err := r.Compute.Delete(ctx, uid); err != nil {
+		if err := r.Compute.Delete(ctx, compute.DeleteRequest{
+			UID:           uid,
+			RetainStorage: ws.Spec.StoragePolicy == workspacesv1alpha1.StoragePolicyRetain,
+		}); err != nil {
 			return ctrl.Result{}, err
 		}
 		controllerutil.RemoveFinalizer(&ws, containerFinalizerName)
@@ -90,7 +96,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	inst, err := r.Compute.Get(ctx, uid)
 	if err != nil && !errors.Is(err, compute.ErrNotFound) {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, r.updateFailureStatus(ctx, &ws, "GetWorkspaceInstance", err)
 	}
 
 	controller := true
@@ -114,12 +120,12 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	})
 
 	if err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, r.updateFailureStatus(ctx, &ws, "CreateWorkspaceInstance", err)
 	}
 
 	if inst.State == compute.StateRunning && inst.IP != "" {
 		if err := r.ensureRouting(ctx, &ws, inst.IP); err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, r.updateFailureStatus(ctx, &ws, "ConfigureWorkspaceRoute", err)
 		}
 	}
 
@@ -129,6 +135,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		IP:          inst.IP,
 		URL:         inst.URL,
 		Message:     "container" + inst.State,
+		Conditions:  append([]metav1.Condition(nil), ws.Status.Conditions...),
 	}
 
 	if inst.State == compute.StateRunning {
@@ -136,9 +143,26 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if inst.IP != "" {
 			want.URL = routeURL(&ws)
 		}
+		apimeta.SetStatusCondition(&want.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: ws.Generation,
+			Reason:             "WorkspaceRunning",
+			Message:            "Workspace container is running",
+			LastTransitionTime: metav1.Now(),
+		})
+	} else {
+		apimeta.SetStatusCondition(&want.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: ws.Generation,
+			Reason:             "WorkspaceProgressing",
+			Message:            "Workspace container is not running",
+			LastTransitionTime: metav1.Now(),
+		})
 	}
 
-	if ws.Status != want {
+	if !apiequality.Semantic.DeepEqual(ws.Status, want) {
 		ws.Status = want
 		if err := r.Status().Update(ctx, &ws); err != nil {
 			return ctrl.Result{}, err
@@ -150,6 +174,23 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	return ctrl.Result{RequeueAfter: time.Minute}, nil
+}
+
+func (r *WorkspaceReconciler) updateFailureStatus(ctx context.Context, ws *workspacesv1alpha1.Workspace, reason string, reconcileErr error) error {
+	ws.Status.Phase = workspacesv1alpha1.PhaseFailed
+	ws.Status.Message = reconcileErr.Error()
+	apimeta.SetStatusCondition(&ws.Status.Conditions, metav1.Condition{
+		Type:               "Ready",
+		Status:             metav1.ConditionFalse,
+		ObservedGeneration: ws.Generation,
+		Reason:             reason,
+		Message:            reconcileErr.Error(),
+		LastTransitionTime: metav1.Now(),
+	})
+	if err := r.Status().Update(ctx, ws); err != nil {
+		return errors.Join(reconcileErr, fmt.Errorf("update failure status: %w", err))
+	}
+	return reconcileErr
 }
 
 // SetupWithManager sets up the controller with the Manager.

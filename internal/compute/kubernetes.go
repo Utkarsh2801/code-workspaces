@@ -53,8 +53,12 @@ func (p *KubernetesProvider) Create(ctx context.Context, req CreateRequest) (*In
 		if !apierrors.IsNotFound(err) {
 			return nil, fmt.Errorf("get workspace PVC %s/%s: %w", req.Namespace, req.Name, err)
 		}
+		pvcOwnerReferences := []metav1.OwnerReference{req.OwnerReference}
+		if req.RetainStorage {
+			pvcOwnerReferences = nil
+		}
 		pvc = &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{Name: req.Name, Namespace: req.Namespace, Labels: labels, OwnerReferences: []metav1.OwnerReference{req.OwnerReference}},
+			ObjectMeta: metav1.ObjectMeta{Name: req.Name, Namespace: req.Namespace, Labels: labels, OwnerReferences: pvcOwnerReferences},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 				Resources:   corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: storageQuantity}},
@@ -128,7 +132,7 @@ func (p *KubernetesProvider) Create(ctx context.Context, req CreateRequest) (*In
 
 func workspaceSpecHash(req CreateRequest) string {
 	args := fmt.Sprintf("%v", req.Args)
-	hash := sha256.Sum256(fmt.Appendf(nil, "%s|%d|%s|%s", req.Image, req.Port, args, req.StorageSize))
+	hash := sha256.Sum256(fmt.Appendf(nil, "%s|%d|%s|%s|%t", req.Image, req.Port, args, req.StorageSize, req.RetainStorage))
 	return fmt.Sprintf("%x", hash[:])
 }
 
@@ -163,10 +167,10 @@ func (p *KubernetesProvider) Get(ctx context.Context, uid string) (*Instance, er
 	}, nil
 }
 
-func (p *KubernetesProvider) Delete(ctx context.Context, uid string) error {
+func (p *KubernetesProvider) Delete(ctx context.Context, req DeleteRequest) error {
 	pods := &corev1.PodList{}
-	if err := p.client.List(ctx, pods, client.MatchingLabels{LabeUID: uid}); err != nil {
-		return fmt.Errorf("list workspace Pods for UID %s: %w", uid, err)
+	if err := p.client.List(ctx, pods, client.MatchingLabels{LabeUID: req.UID}); err != nil {
+		return fmt.Errorf("list workspace Pods for UID %s: %w", req.UID, err)
 	}
 	for i := range pods.Items {
 		pod := &pods.Items[i]
@@ -174,6 +178,9 @@ func (p *KubernetesProvider) Delete(ctx context.Context, uid string) error {
 			return fmt.Errorf("delete workspace Pod %s/%s: %w", pod.Namespace, pod.Name, err)
 		}
 
+		if req.RetainStorage {
+			continue
+		}
 		pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: pod.Name, Namespace: pod.Namespace}}
 		if err := p.client.Delete(ctx, pvc); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("delete workspace PVC %s/%s: %w", pod.Namespace, pod.Name, err)

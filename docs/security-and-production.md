@@ -4,13 +4,10 @@ The current setup is designed for local development and learning, not as a
 hardened multi-user service. The key limitations are specific to how this
 project currently creates and exposes workspaces:
 
-- **Docker host access:** The controller mounts `/var/run/docker.sock`. A
-  compromised controller or a user who can influence Docker operations may
-  gain broad control of the Docker host. Treat access to the controller and
-  its RBAC permissions as highly privileged.
-- **Workspace isolation:** Workspaces are Docker containers managed through
-  that daemon. They do not provide the isolation boundary of dedicated
-  virtual machines or hardened per-tenant Kubernetes workloads.
+- **Pod isolation:** Workspaces run as Pods, but they do not yet provide a
+  hardened tenant boundary or enforce per-tenant network and resource policies.
+- **Storage lifecycle:** PVCs preserve workspace files, but snapshots, backup,
+  restore, encryption, and quota enforcement are not implemented.
 - **Editor access:** The sample code-server configuration uses `--auth none`.
   It is safe only while every route remains behind Pomerium and its owner
   policy. Do not expose the container port directly or bypass that proxy.

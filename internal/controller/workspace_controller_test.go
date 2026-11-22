@@ -154,14 +154,12 @@ func TestReconcileCreatesMissingInstanceAndUpdatesStatus(t *testing.T) {
 	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: testWorkspaceName, Namespace: testNamespace}, &got); err != nil {
 		t.Fatalf("get Workspace after reconcile: %v", err)
 	}
-	wantStatus := workspacesv1alpha1.WorkspaceStatus{
-		Phase:       workspacesv1alpha1.PhaseCreating,
-		ContainerID: "container-" + string(testUID),
-		Message:     "containercreating",
+	if got.Status.Phase != workspacesv1alpha1.PhaseCreating ||
+		got.Status.ContainerID != "container-"+string(testUID) ||
+		got.Status.Message != "containercreating" {
+		t.Errorf("Workspace status = %+v, want creating status", got.Status)
 	}
-	if got.Status != wantStatus {
-		t.Errorf("Workspace status = %+v, want %+v", got.Status, wantStatus)
-	}
+	assertWorkspaceCondition(t, got.Status.Conditions, "Ready", metav1.ConditionFalse)
 }
 
 func TestReconcileKeepsRunningInstance(t *testing.T) {
@@ -194,16 +192,14 @@ func TestReconcileKeepsRunningInstance(t *testing.T) {
 	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: testWorkspaceName, Namespace: testNamespace}, &got); err != nil {
 		t.Fatalf("get Workspace after reconcile: %v", err)
 	}
-	wantStatus := workspacesv1alpha1.WorkspaceStatus{
-		Phase:       workspacesv1alpha1.PhaseRunning,
-		ContainerID: "container-running",
-		IP:          "10.0.0.4",
-		URL:         routeURL(workspace),
-		Message:     "containerrunning",
+	if got.Status.Phase != workspacesv1alpha1.PhaseRunning ||
+		got.Status.ContainerID != "container-running" ||
+		got.Status.IP != "10.0.0.4" ||
+		got.Status.URL != routeURL(workspace) ||
+		got.Status.Message != "containerrunning" {
+		t.Errorf("Workspace status = %+v, want running status", got.Status)
 	}
-	if got.Status != wantStatus {
-		t.Errorf("Workspace status = %+v, want %+v", got.Status, wantStatus)
-	}
+	assertWorkspaceCondition(t, got.Status.Conditions, "Ready", metav1.ConditionTrue)
 	for _, resource := range []client.Object{
 		&corev1.Service{},
 		&corev1.Endpoints{}, //nolint:staticcheck // Pomerium still discovers backends from core Endpoints.
@@ -244,7 +240,7 @@ func TestReconcileReturnsProviderErrors(t *testing.T) {
 		{name: "create error", provider: &FakeProvider{CreateErr: createErr}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			reconciler, _ := newTestReconciler(t, testWorkspace(true), tt.provider)
+			reconciler, k8sClient := newTestReconciler(t, testWorkspace(true), tt.provider)
 			_, err := reconcileWorkspace(t, reconciler)
 			if err == nil {
 				t.Fatal("Reconcile() error = nil, want provider error")
@@ -255,6 +251,15 @@ func TestReconcileReturnsProviderErrors(t *testing.T) {
 			if tt.name == "create error" && !errors.Is(err, createErr) {
 				t.Errorf("Reconcile() error = %v, want %v", err, createErr)
 			}
+
+			var got workspacesv1alpha1.Workspace
+			if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: testWorkspaceName, Namespace: testNamespace}, &got); err != nil {
+				t.Fatalf("get Workspace after provider failure: %v", err)
+			}
+			if got.Status.Phase != workspacesv1alpha1.PhaseFailed {
+				t.Errorf("Workspace phase = %q, want Failed", got.Status.Phase)
+			}
+			assertWorkspaceCondition(t, got.Status.Conditions, "Ready", metav1.ConditionFalse)
 		})
 	}
 }
@@ -276,8 +281,8 @@ func TestReconcileDeletesInstanceAndRemovesFinalizer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reconcile() error = %v", err)
 	}
-	if len(provider.Deleted) != 1 || provider.Deleted[0] != string(testUID) {
-		t.Errorf("Delete() calls = %v, want [%q]", provider.Deleted, testUID)
+	if len(provider.Deleted) != 1 || provider.Deleted[0].UID != string(testUID) {
+		t.Errorf("Delete() calls = %v, want UID %q", provider.Deleted, testUID)
 	}
 	err = k8sClient.Get(context.Background(), key, &workspace)
 	if err != nil && !apierrors.IsNotFound(err) {
@@ -315,6 +320,19 @@ func TestReconcileDoesNotRemoveFinalizerWhenDeleteFails(t *testing.T) {
 	if !containsFinalizer(workspace.Finalizers, containerFinalizerName) {
 		t.Errorf("Workspace finalizers = %v, want deletion finalizer retained", workspace.Finalizers)
 	}
+}
+
+func assertWorkspaceCondition(t *testing.T, conditions []metav1.Condition, conditionType string, status metav1.ConditionStatus) {
+	t.Helper()
+	for i := range conditions {
+		if conditions[i].Type == conditionType {
+			if conditions[i].Status != status {
+				t.Errorf("condition %q status = %q, want %q", conditionType, conditions[i].Status, status)
+			}
+			return
+		}
+	}
+	t.Errorf("condition %q not found in %+v", conditionType, conditions)
 }
 
 func containsFinalizer(finalizers []string, name string) bool {
