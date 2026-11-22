@@ -8,6 +8,7 @@ rules:
   - ""
   resources:
   - endpoints
+  - persistentvolumeclaims
   - pods
   - services
   verbs:

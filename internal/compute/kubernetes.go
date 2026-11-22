@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -44,7 +45,7 @@ func (p *KubernetesProvider) Create(ctx context.Context, req CreateRequest) (*In
 	labels := map[string]string{
 		LabelManagedBy: managedValue,
 		LabeUID:        req.UID,
-		LabeOwner:      req.Owner,
+		LabeOwner:      ownerLabelValue(req.Owner),
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{}
@@ -138,6 +139,26 @@ func workspaceSpecHash(req CreateRequest) string {
 
 func ptrTo[T any](value T) *T {
 	return &value
+}
+
+func ownerLabelValue(owner string) string {
+	var value strings.Builder
+	for _, char := range strings.ToLower(owner) {
+		switch {
+		case char == '@':
+			value.WriteString("_at_")
+		case char >= 'a' && char <= 'z', char >= '0' && char <= '9', char == '-', char == '_', char == '.':
+			value.WriteRune(char)
+		default:
+			value.WriteByte('-')
+		}
+	}
+
+	label := strings.Trim(value.String(), "-_.")
+	if len(label) > 63 {
+		label = strings.TrimRight(label[:63], "-_.")
+	}
+	return label
 }
 
 func (p *KubernetesProvider) Get(ctx context.Context, uid string) (*Instance, error) {

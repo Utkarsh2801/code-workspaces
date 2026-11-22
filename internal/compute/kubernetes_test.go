@@ -124,6 +124,25 @@ func TestKubernetesProviderRetainsPVC(t *testing.T) {
 	}
 }
 
+func TestKubernetesProviderSanitizesOwnerLabel(t *testing.T) {
+	provider := newTestKubernetesProvider(t)
+	_, err := provider.Create(context.Background(), CreateRequest{
+		UID: "workspace-uid", Name: "test-workspace", Namespace: "default",
+		Owner: "Alice.User+tag@example.com", Image: "codercom/code-server", Port: 8080,
+	})
+	if err != nil {
+		t.Fatalf("Create() error: %v", err)
+	}
+
+	var pod corev1.Pod
+	if err := provider.client.Get(context.Background(), types.NamespacedName{Name: "test-workspace", Namespace: "default"}, &pod); err != nil {
+		t.Fatalf("get Pod: %v", err)
+	}
+	if pod.Labels[LabeOwner] != "alice.user-tag_at_example.com" {
+		t.Errorf("owner label = %q, want %q", pod.Labels[LabeOwner], "alice.user-tag_at_example.com")
+	}
+}
+
 func TestKubernetesProviderGetNotFound(t *testing.T) {
 	provider := newTestKubernetesProvider(t)
 	_, err := provider.Get(context.Background(), "missing")
