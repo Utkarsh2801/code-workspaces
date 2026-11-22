@@ -2,6 +2,7 @@ package compute
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -65,6 +66,18 @@ func TestKubernetesProviderCreateGetAndDelete(t *testing.T) {
 	container := pod.Spec.Containers[0]
 	if container.SecurityContext == nil || container.SecurityContext.AllowPrivilegeEscalation == nil || *container.SecurityContext.AllowPrivilegeEscalation {
 		t.Error("Pod container must disable privilege escalation")
+	}
+	hasNodePath := false
+	for _, env := range container.Env {
+		if env.Name == "PATH" && strings.Contains(env.Value, "/workspace/tools/node/bin") {
+			hasNodePath = true
+		}
+	}
+	if !hasNodePath {
+		t.Errorf("Workspace container PATH = %+v, want /workspace/tools/node/bin", container.Env)
+	}
+	if len(pod.Spec.InitContainers) != 1 || pod.Spec.InitContainers[0].Name != setupContainerName {
+		t.Errorf("Pod init containers = %+v, want %s", pod.Spec.InitContainers, setupContainerName)
 	}
 	if len(container.VolumeMounts) != 1 || container.VolumeMounts[0].MountPath != workspaceMountPath {
 		t.Errorf("Pod volume mounts = %+v, want %s mount", container.VolumeMounts, workspaceMountPath)
@@ -147,6 +160,58 @@ func TestKubernetesProviderSanitizesOwnerLabel(t *testing.T) {
 	}
 	if pod.Labels[LabelOwner] != "alice.user-tag_at_example.com" {
 		t.Errorf("owner label = %q, want %q", pod.Labels[LabelOwner], "alice.user-tag_at_example.com")
+	}
+}
+
+func TestKubernetesProviderInitSetupStates(t *testing.T) {
+	tests := []struct {
+		name       string
+		terminated *corev1.ContainerStateTerminated
+		waiting    *corev1.ContainerStateWaiting
+		wantState  string
+	}{
+		{name: "completed", terminated: &corev1.ContainerStateTerminated{ExitCode: 0}, waiting: nil, wantState: "Running"},
+		{name: "failed", terminated: &corev1.ContainerStateTerminated{ExitCode: 23}, waiting: nil, wantState: StateFailed},
+		{name: "crash loop", terminated: nil, waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}, wantState: StateFailed},
+		{name: "running", terminated: nil, waiting: nil, wantState: StateCreating},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName, Labels: map[string]string{LabelUID: testWorkspaceUID}},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodPending,
+					InitContainerStatuses: []corev1.ContainerStatus{{
+						Name:  setupContainerName,
+						State: corev1.ContainerState{Terminated: tt.terminated, Waiting: tt.waiting},
+					}},
+				},
+			}
+			provider := newTestKubernetesProvider(t, pod)
+
+			instance, err := provider.Get(context.Background(), testWorkspaceUID)
+			if err != nil {
+				t.Fatalf("Get() error: %v", err)
+			}
+			if tt.wantState == "Running" {
+				pod.Status.Phase = corev1.PodRunning
+				if err := provider.client.Status().Update(context.Background(), pod); err != nil {
+					t.Fatalf("update Pod status: %v", err)
+				}
+				instance, err = provider.Get(context.Background(), testWorkspaceUID)
+				if err != nil {
+					t.Fatalf("Get() after running: %v", err)
+				}
+			}
+			want := tt.wantState
+			if tt.wantState == "Running" {
+				want = StateRunning
+			}
+			if instance.State != want {
+				t.Errorf("Get() state = %q, want %q", instance.State, want)
+			}
+		})
 	}
 }
 

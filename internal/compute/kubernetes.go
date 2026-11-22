@@ -19,6 +19,25 @@ const (
 	workspaceMountPath      = "/workspace"
 	workspaceSpecAnnotation = "workspaces.example.com/spec-hash"
 	defaultStorageSize      = "1Gi"
+	setupContainerName      = "install-node"
+	setupMarkerPath         = workspaceMountPath + "/.node-22-installed"
+	setupScript             = `#!/bin/sh
+set -eu
+
+TOOLS_DIR=/workspace/tools/node
+MARKER=/workspace/.node-22-installed
+
+if [ -f "$MARKER" ] && [ -x "$TOOLS_DIR/bin/node" ]; then
+  "$TOOLS_DIR/bin/node" --version
+  exit 0
+fi
+
+mkdir -p "$TOOLS_DIR/bin"
+cp -f /usr/local/bin/node "$TOOLS_DIR/bin/node"
+
+"$TOOLS_DIR/bin/node" --version
+: > "$MARKER"
+`
 )
 
 // KubernetesProvider creates workspace containers as Kubernetes Pods.
@@ -89,6 +108,7 @@ func (p *KubernetesProvider) Create(ctx context.Context, req CreateRequest) (*In
 
 	allowPrivilegeEscalation := false
 	runAsNonRoot := true
+	setupRunAsUser := int64(1000)
 	pod = &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            req.Name,
@@ -99,8 +119,22 @@ func (p *KubernetesProvider) Create(ctx context.Context, req CreateRequest) (*In
 		},
 		Spec: corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyAlways,
+			InitContainers: []corev1.Container{{
+				Name:            setupContainerName,
+				Image:           "node:22-slim",
+				ImagePullPolicy: corev1.PullIfNotPresent,
+				Command:         []string{"/bin/sh", "-c", setupScript},
+				SecurityContext: &corev1.SecurityContext{
+					AllowPrivilegeEscalation: &allowPrivilegeEscalation,
+					RunAsNonRoot:             &runAsNonRoot,
+					RunAsUser:                &setupRunAsUser,
+				},
+				VolumeMounts: []corev1.VolumeMount{{Name: "workspace-data", MountPath: workspaceMountPath}},
+			}},
 			SecurityContext: &corev1.PodSecurityContext{
 				RunAsNonRoot:   &runAsNonRoot,
+				RunAsUser:      &setupRunAsUser,
+				FSGroup:        &setupRunAsUser,
 				SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 			},
 			Containers: []corev1.Container{{
@@ -108,6 +142,7 @@ func (p *KubernetesProvider) Create(ctx context.Context, req CreateRequest) (*In
 				Image:           req.Image,
 				Args:            req.Args,
 				ImagePullPolicy: corev1.PullIfNotPresent,
+				Env:             []corev1.EnvVar{{Name: "PATH", Value: "/workspace/tools/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}},
 				SecurityContext: &corev1.SecurityContext{
 					AllowPrivilegeEscalation: &allowPrivilegeEscalation,
 					Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
@@ -168,6 +203,27 @@ func (p *KubernetesProvider) Get(ctx context.Context, uid string) (*Instance, er
 	}
 
 	pod := &pods.Items[0]
+	for i := range pod.Status.InitContainerStatuses {
+		status := pod.Status.InitContainerStatuses[i]
+		if status.Name != setupContainerName {
+			continue
+		}
+		if status.State.Terminated != nil {
+			if status.State.Terminated.ExitCode != 0 {
+				return &Instance{ID: string(pod.UID), Name: pod.Name, UID: uid, State: StateFailed, IP: pod.Status.PodIP, CreatedAt: pod.CreationTimestamp.Time}, nil
+			}
+		} else if status.State.Waiting != nil {
+			switch status.State.Waiting.Reason {
+			case "CreateContainerConfigError", "RunContainerError", "CrashLoopBackOff":
+				return &Instance{ID: string(pod.UID), Name: pod.Name, UID: uid, State: StateFailed, IP: pod.Status.PodIP, CreatedAt: pod.CreationTimestamp.Time}, nil
+			default:
+				return &Instance{ID: string(pod.UID), Name: pod.Name, UID: uid, State: StateCreating, IP: pod.Status.PodIP, CreatedAt: pod.CreationTimestamp.Time}, nil
+			}
+		} else {
+			return &Instance{ID: string(pod.UID), Name: pod.Name, UID: uid, State: StateCreating, IP: pod.Status.PodIP, CreatedAt: pod.CreationTimestamp.Time}, nil
+		}
+	}
+
 	state := string(pod.Status.Phase)
 	if pod.Status.Phase == corev1.PodRunning {
 		state = StateRunning

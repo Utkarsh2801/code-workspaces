@@ -12,6 +12,8 @@ var ErrNotFound = errors.New("instance not found")
 
 const (
 	StateRunning   = "running"
+	StateCreating  = "creating"
+	StateFailed    = "failed"
 	LabelManagedBy = "managed-by"
 	LabelUID       = "workspace-uid"
 	LabelOwner     = "workspace-owner"

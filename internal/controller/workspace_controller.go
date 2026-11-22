@@ -136,7 +136,18 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		Conditions:  append([]metav1.Condition(nil), ws.Status.Conditions...),
 	}
 
-	if inst.State == compute.StateRunning {
+	if inst.State == compute.StateFailed {
+		want.Phase = workspacesv1alpha1.PhaseFailed
+		want.Message = "workspace setup failed"
+		apimeta.SetStatusCondition(&want.Conditions, metav1.Condition{
+			Type:               readyConditionType,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: ws.Generation,
+			Reason:             "SetupFailed",
+			Message:            "Node setup init container failed",
+			LastTransitionTime: metav1.Now(),
+		})
+	} else if inst.State == compute.StateRunning {
 		want.Phase = workspacesv1alpha1.PhaseRunning
 		if inst.IP != "" {
 			want.URL = routeURL(&ws)
