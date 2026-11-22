@@ -8,7 +8,7 @@ machine, not the public internet.
 
 - Docker, Kind, `kubectl`, Go, and Make.
 - OpenSSL and `htpasswd` for generating local secrets and password hashes.
-- A local Docker daemon that can be mounted into the Kind node.
+- A Docker daemon for building the controller image and running Kind.
 - cert-manager installed in the cluster for the operator and local certificates;
   follow the [cert-manager installation guide](https://cert-manager.io/docs/installation/).
 
@@ -19,8 +19,8 @@ kind create cluster --name docker-workspaces --config config/local-dev/kind.yaml
 kubectl config use-context kind-docker-workspaces
 ```
 
-The Kind configuration maps ports 80 and 443 to the host and mounts the Docker
-socket. The controller's Docker provider expects the Kind network.
+The Kind configuration maps ports 80 and 443 to the host. The controller uses
+Kubernetes Pods and PVCs rather than a mounted Docker socket.
 
 ## Configure local authentication and routing
 
@@ -145,8 +145,9 @@ kubectl get pod,pvc,service,ingress -n default
 ```
 
 Verify that the requested image can be pulled and that the Workspace Pod and
-PVC are created. A deleting Workspace remains until the controller removes its
-container.
+PVC are created. Files under `/workspace` persist in the workspace PVC across
+Pod restarts. A deleting Workspace remains until the controller removes its
+workload and applies its storage policy.
 
 ### A workspace URL does not resolve or reach the container
 
