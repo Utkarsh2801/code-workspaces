@@ -37,7 +37,10 @@ import (
 	"github.com/utkarsh2801/docker-workspaces/internal/compute"
 )
 
-const containerFinalizerName = "workspaces.example.com/container"
+const (
+	containerFinalizerName = "workspaces.example.com/container"
+	readyConditionType     = "Ready"
+)
 
 // WorkspaceReconciler reconciles a Workspace object
 type WorkspaceReconciler struct {
@@ -56,12 +59,7 @@ type WorkspaceReconciler struct {
 // +kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices,verbs=get;delete
 // +kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Workspace object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
+// Reconcile moves the Kubernetes resources for a Workspace toward the desired state.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.25.0/pkg/reconcile
@@ -95,14 +93,13 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, r.Update(ctx, &ws)
 	}
 
-	inst, err := r.Compute.Get(ctx, uid)
-	if err != nil && !errors.Is(err, compute.ErrNotFound) {
+	if _, err := r.Compute.Get(ctx, uid); err != nil && !errors.Is(err, compute.ErrNotFound) {
 		return ctrl.Result{}, r.updateFailureStatus(ctx, &ws, "GetWorkspaceInstance", err)
 	}
 
 	controller := true
 	logf.Log.Info("Ensuring workspace", "uid", uid)
-	inst, err = r.Compute.Create(ctx, compute.CreateRequest{
+	inst, err := r.Compute.Create(ctx, compute.CreateRequest{
 		UID:         uid,
 		Name:        ws.Name,
 		Namespace:   ws.Namespace,
@@ -145,7 +142,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			want.URL = routeURL(&ws)
 		}
 		apimeta.SetStatusCondition(&want.Conditions, metav1.Condition{
-			Type:               "Ready",
+			Type:               readyConditionType,
 			Status:             metav1.ConditionTrue,
 			ObservedGeneration: ws.Generation,
 			Reason:             "WorkspaceRunning",
@@ -154,7 +151,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		})
 	} else {
 		apimeta.SetStatusCondition(&want.Conditions, metav1.Condition{
-			Type:               "Ready",
+			Type:               readyConditionType,
 			Status:             metav1.ConditionFalse,
 			ObservedGeneration: ws.Generation,
 			Reason:             "WorkspaceProgressing",
@@ -181,7 +178,7 @@ func (r *WorkspaceReconciler) updateFailureStatus(ctx context.Context, ws *works
 	ws.Status.Phase = workspacesv1alpha1.PhaseFailed
 	ws.Status.Message = reconcileErr.Error()
 	apimeta.SetStatusCondition(&ws.Status.Conditions, metav1.Condition{
-		Type:               "Ready",
+		Type:               readyConditionType,
 		Status:             metav1.ConditionFalse,
 		ObservedGeneration: ws.Generation,
 		Reason:             reason,

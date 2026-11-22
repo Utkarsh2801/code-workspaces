@@ -13,9 +13,9 @@ var ErrNotFound = errors.New("instance not found")
 const (
 	StateRunning   = "running"
 	LabelManagedBy = "managed-by"
-	LabeUID        = "workspace-uid"
-	LabeOwner      = "workspace-owner"
-	managedValue   = "docker-workspaces"
+	LabelUID       = "workspace-uid"
+	LabelOwner     = "workspace-owner"
+	managedValue   = "code-workspaces"
 )
 
 // contains information about a machine instance.

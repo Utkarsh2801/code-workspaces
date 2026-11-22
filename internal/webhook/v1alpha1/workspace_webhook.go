@@ -55,8 +55,6 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-
 // +kubebuilder:webhook:path=/mutate-workspaces-example-com-v1alpha1-workspace,mutating=true,failurePolicy=fail,sideEffects=None,groups=workspaces.example.com,resources=workspaces,verbs=create;update,versions=v1alpha1,name=mworkspace-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // WorkspaceDefaulter struct is responsible for setting default values on the custom resource of the
@@ -65,7 +63,6 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as it is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceDefaulter struct {
-	// TODO(user): Add more fields as needed for defaulting
 }
 
 // Default implements admission.Defaulter so a webhook will be registered for the Kind Workspace.
@@ -83,7 +80,6 @@ func (d *WorkspaceDefaulter) Default(_ context.Context, obj *workspacesv1alpha1.
 	return nil
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 // NOTE: If you want to customise the 'path', use the flags '--defaulting-path' or '--validation-path'.
 // +kubebuilder:webhook:path=/validate-workspaces-example-com-v1alpha1-workspace,mutating=false,failurePolicy=fail,sideEffects=None,groups=workspaces.example.com,resources=workspaces,verbs=create;update,versions=v1alpha1,name=vworkspace-v1alpha1.kb.io,admissionReviewVersions=v1
 
@@ -93,7 +89,6 @@ func (d *WorkspaceDefaulter) Default(_ context.Context, obj *workspacesv1alpha1.
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceValidator struct {
-	// TODO(user): Add more fields as needed for validation
 }
 
 // ValidateCreate implements admission.Validator so a webhook will be registered for the type Workspace.

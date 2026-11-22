@@ -44,8 +44,8 @@ func (p *KubernetesProvider) Create(ctx context.Context, req CreateRequest) (*In
 
 	labels := map[string]string{
 		LabelManagedBy: managedValue,
-		LabeUID:        req.UID,
-		LabeOwner:      ownerLabelValue(req.Owner),
+		LabelUID:       req.UID,
+		LabelOwner:     ownerLabelValue(req.Owner),
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{}
@@ -88,6 +88,7 @@ func (p *KubernetesProvider) Create(ctx context.Context, req CreateRequest) (*In
 	}
 
 	allowPrivilegeEscalation := false
+	runAsNonRoot := true
 	pod = &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            req.Name,
@@ -99,7 +100,7 @@ func (p *KubernetesProvider) Create(ctx context.Context, req CreateRequest) (*In
 		Spec: corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyAlways,
 			SecurityContext: &corev1.PodSecurityContext{
-				RunAsNonRoot:   ptrTo(true),
+				RunAsNonRoot:   &runAsNonRoot,
 				SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 			},
 			Containers: []corev1.Container{{
@@ -137,10 +138,6 @@ func workspaceSpecHash(req CreateRequest) string {
 	return fmt.Sprintf("%x", hash[:])
 }
 
-func ptrTo[T any](value T) *T {
-	return &value
-}
-
 func ownerLabelValue(owner string) string {
 	var value strings.Builder
 	for _, char := range strings.ToLower(owner) {
@@ -163,7 +160,7 @@ func ownerLabelValue(owner string) string {
 
 func (p *KubernetesProvider) Get(ctx context.Context, uid string) (*Instance, error) {
 	pods := &corev1.PodList{}
-	if err := p.client.List(ctx, pods, client.MatchingLabels{LabeUID: uid}); err != nil {
+	if err := p.client.List(ctx, pods, client.MatchingLabels{LabelUID: uid}); err != nil {
 		return nil, fmt.Errorf("list workspace Pods for UID %s: %w", uid, err)
 	}
 	if len(pods.Items) == 0 {
@@ -190,7 +187,7 @@ func (p *KubernetesProvider) Get(ctx context.Context, uid string) (*Instance, er
 
 func (p *KubernetesProvider) Delete(ctx context.Context, req DeleteRequest) error {
 	pods := &corev1.PodList{}
-	if err := p.client.List(ctx, pods, client.MatchingLabels{LabeUID: req.UID}); err != nil {
+	if err := p.client.List(ctx, pods, client.MatchingLabels{LabelUID: req.UID}); err != nil {
 		return fmt.Errorf("list workspace Pods for UID %s: %w", req.UID, err)
 	}
 	for i := range pods.Items {
@@ -228,7 +225,7 @@ func (p *KubernetesProvider) List(ctx context.Context) ([]*Instance, error) {
 		instances = append(instances, &Instance{
 			ID:        string(pod.UID),
 			Name:      pod.Name,
-			UID:       pod.Labels[LabeUID],
+			UID:       pod.Labels[LabelUID],
 			State:     state,
 			IP:        pod.Status.PodIP,
 			CreatedAt: pod.CreationTimestamp.Time,

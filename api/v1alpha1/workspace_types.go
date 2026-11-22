@@ -21,9 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // WorkspaceSpec defines the desired state of Workspace
 type WorkspaceSpec struct {
 	// Owner is the email address of the user who owns this workspace.

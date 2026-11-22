@@ -30,7 +30,7 @@ spec:
         control-plane: controller-manager
         app.kubernetes.io/name: docker-workspace
     spec:
-      # TODO(user): Uncomment the following code to configure the nodeAffinity expression
+      # Optional node affinity can be configured when the supported architectures are known.
       # according to the platforms which are supported by your solution.
       # It is considered best practice to support multiple architectures. You can
       # build your manager image using the makefile target docker-buildx.
@@ -90,7 +90,7 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
-        # TODO(user): Configure the resources accordingly based on the project requirements.
+        # Resource requests and limits are suitable defaults for local development.
         # More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
         resources:
           limits:

@@ -159,7 +159,7 @@ func TestReconcileCreatesMissingInstanceAndUpdatesStatus(t *testing.T) {
 		got.Status.Message != "containercreating" {
 		t.Errorf("Workspace status = %+v, want creating status", got.Status)
 	}
-	assertWorkspaceCondition(t, got.Status.Conditions, "Ready", metav1.ConditionFalse)
+	assertWorkspaceCondition(t, got.Status.Conditions, readyConditionType, metav1.ConditionFalse)
 }
 
 func TestReconcileKeepsRunningInstance(t *testing.T) {
@@ -199,7 +199,7 @@ func TestReconcileKeepsRunningInstance(t *testing.T) {
 		got.Status.Message != "containerrunning" {
 		t.Errorf("Workspace status = %+v, want running status", got.Status)
 	}
-	assertWorkspaceCondition(t, got.Status.Conditions, "Ready", metav1.ConditionTrue)
+	assertWorkspaceCondition(t, got.Status.Conditions, readyConditionType, metav1.ConditionTrue)
 	for _, resource := range []client.Object{
 		&corev1.Service{},
 		&corev1.Endpoints{}, //nolint:staticcheck // Pomerium still discovers backends from core Endpoints.
@@ -259,7 +259,7 @@ func TestReconcileReturnsProviderErrors(t *testing.T) {
 			if got.Status.Phase != workspacesv1alpha1.PhaseFailed {
 				t.Errorf("Workspace phase = %q, want Failed", got.Status.Phase)
 			}
-			assertWorkspaceCondition(t, got.Status.Conditions, "Ready", metav1.ConditionFalse)
+			assertWorkspaceCondition(t, got.Status.Conditions, readyConditionType, metav1.ConditionFalse)
 		})
 	}
 }

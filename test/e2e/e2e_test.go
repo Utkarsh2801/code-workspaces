@@ -49,19 +49,12 @@ var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
 
 	// Before running the tests, set up the environment by creating the namespace,
-	// allow the Docker socket hostPath required by the controller, installing CRDs,
-	// and deploying the controller.
+	// Install CRDs and deploy the controller for isolated E2E testing.
 	BeforeAll(func() {
 		By("creating manager namespace")
 		cmd := exec.Command("kubectl", "create", "ns", namespace)
 		_, err := utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create namespace")
-
-		By("allowing the Docker socket hostPath in the manager namespace")
-		cmd = exec.Command("kubectl", "label", "--overwrite", "ns", namespace,
-			"pod-security.kubernetes.io/enforce=privileged")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to allow the Docker socket hostPath")
 
 		By("installing CRDs")
 		cmd = exec.Command("make", "install")
@@ -344,7 +337,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
+		// Add workspace lifecycle scenarios here as the controller API grows.
 		// Consider applying sample/CR(s) and check their status and/or verifying
 		// the reconciliation by using the metrics, i.e.:
 		// metricsOutput, err := getMetricsOutput()
