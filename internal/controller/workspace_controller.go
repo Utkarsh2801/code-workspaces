@@ -23,6 +23,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,6 +48,7 @@ type WorkspaceReconciler struct {
 // +kubebuilder:rbac:groups=workspaces.example.com,resources=workspaces/finalizers,verbs=update
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services;endpoints,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices,verbs=get;delete
 // +kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices,verbs=get;list;watch;create;update;patch;delete
 
@@ -87,16 +89,29 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	inst, err := r.Compute.Get(ctx, uid)
-	if errors.Is(err, compute.ErrNotFound) || (err == nil && inst.State != compute.StateRunning) {
-		logf.Log.Info("Creating workspace", "uid", uid)
-		inst, err = r.Compute.Create(ctx, compute.CreateRequest{
-			UID:   uid,
-			Owner: ws.Spec.Owner,
-			Image: ws.Spec.Image,
-			Port:  int(ws.Spec.Port),
-			Args:  ws.Spec.Args,
-		})
+	if err != nil && !errors.Is(err, compute.ErrNotFound) {
+		return ctrl.Result{}, err
 	}
+
+	controller := true
+	logf.Log.Info("Ensuring workspace", "uid", uid)
+	inst, err = r.Compute.Create(ctx, compute.CreateRequest{
+		UID:         uid,
+		Name:        ws.Name,
+		Namespace:   ws.Namespace,
+		Owner:       ws.Spec.Owner,
+		Image:       ws.Spec.Image,
+		Port:        int(ws.Spec.Port),
+		Args:        ws.Spec.Args,
+		StorageSize: ws.Spec.StorageSize,
+		OwnerReference: metav1.OwnerReference{
+			APIVersion: workspacesv1alpha1.GroupVersion.String(),
+			Kind:       "Workspace",
+			Name:       ws.Name,
+			UID:        ws.UID,
+			Controller: &controller,
+		},
+	})
 
 	if err != nil {
 		return ctrl.Result{}, err
@@ -141,6 +156,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&workspacesv1alpha1.Workspace{}).
+		Owns(&corev1.Pod{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.Endpoints{}). //nolint:staticcheck // Pomerium still discovers backends from core Endpoints.
 		Owns(&networkingv1.Ingress{}).

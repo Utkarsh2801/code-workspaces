@@ -185,17 +185,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	dockerProvider, err := compute.NewDockerProvider()
+	kubernetesProvider, err := compute.NewKubernetesProvider(mgr.GetClient())
 
 	if err != nil {
-		setupLog.Error(err, "Failed to start manager")
+		setupLog.Error(err, "Failed to create Kubernetes compute provider")
 		os.Exit(1)
 	}
 
 	if err := (&controller.WorkspaceReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
-		Compute: dockerProvider,
+		Compute: kubernetesProvider,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "workspace")
 		os.Exit(1)

@@ -73,6 +73,11 @@ spec:
                 maximum: 65535
                 minimum: 1
                 type: integer
+              storageSize:
+                default: 1Gi
+                description: StorageSize is the requested persistent volume size.
+                pattern: ^[0-9]+([EPTGMK]i?|[eE][0-9]+)?$
+                type: string
             required:
             - owner
             type: object

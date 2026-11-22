@@ -18,11 +18,17 @@ type FakeProvider struct {
 }
 
 func (p *FakeProvider) Create(_ context.Context, req compute.CreateRequest) (*compute.Instance, error) {
-	p.Created = append(p.Created, req)
 	if p.CreateErr != nil {
+		p.Created = append(p.Created, req)
 		return nil, p.CreateErr
 	}
+	if p.Instances != nil {
+		if instance, ok := p.Instances[req.UID]; ok && instance.State == compute.StateRunning {
+			return instance, nil
+		}
+	}
 
+	p.Created = append(p.Created, req)
 	instance := &compute.Instance{
 		ID:    "container-" + req.UID,
 		UID:   req.UID,

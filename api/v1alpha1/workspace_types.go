@@ -44,6 +44,12 @@ type WorkspaceSpec struct {
 
 	// +optional
 	Args []string `json:"args,omitempty"`
+
+	// StorageSize is the requested persistent volume size.
+	// +kubebuilder:default="1Gi"
+	// +kubebuilder:validation:Pattern=`^[0-9]+([EPTGMK]i?|[eE][0-9]+)?$`
+	// +optional
+	StorageSize string `json:"storageSize,omitempty"`
 }
 
 // WorkspaceStatus defines the observed state of Workspace.

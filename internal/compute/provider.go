@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var ErrNotFound = errors.New("instance not found")
@@ -23,11 +25,15 @@ type Instance struct {
 
 // Provider needs and createRequest to create machine instances.
 type CreateRequest struct {
-	UID   string
-	Owner string
-	Image string
-	Port  int
-	Args  []string
+	UID            string
+	Name           string
+	Namespace      string
+	Owner          string
+	Image          string
+	Port           int
+	Args           []string
+	StorageSize    string
+	OwnerReference metav1.OwnerReference
 }
 
 type Provider interface {
