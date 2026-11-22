@@ -1,6 +1,6 @@
-# Docker Workspaces
+# Code Workspaces
 
-Docker Workspaces is a Kubernetes operator for creating browser-accessible
+Code Workspaces is a Kubernetes operator for creating browser-accessible
 development environments from `Workspace` resources. A dashboard lets users
 create, open, and delete their workspaces.
 
